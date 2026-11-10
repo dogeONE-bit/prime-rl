@@ -30,6 +30,7 @@ from prime_rl.configs.orchestrator import (
 from prime_rl.configs.pretrain import PretrainConfig
 from prime_rl.configs.rl import RLConfig
 from prime_rl.configs.sft import SFTConfig
+from prime_rl.configs.shared import ModelExpressWeightBroadcastConfig
 from prime_rl.configs.trainer import ModelConfig as TrainerModelConfig
 from prime_rl.configs.trainer import TrainerConfig
 from prime_rl.utils.config import MODES, BaseConfig, check_mode, cli, dump_resolved_config
@@ -1476,3 +1477,18 @@ def test_score_centering_replays_top_p_alone():
     assert sampling.top_k == 10000 and sampling.logprobs == 1
     assert sampling.extra_body["extra_args"]["prl_replay"]
     assert config.inference.enable_return_sampling_mask
+
+
+def test_weight_pull_rejects_in_place_trainer_staging():
+    with pytest.raises(ValidationError, match="staging_mode"):
+        ModelExpressWeightBroadcastConfig(mode="pull", staging_buffer_bytes=1, staging_mode="IN_PLACE")
+
+
+def test_weight_pull_engine_follows_the_configured_model_with_only_its_own_experts():
+    config = InferenceConfig.model_validate(
+        {"weight_broadcast": {"type": "modelexpress", "pull": {"server": "mx:8001", "staging_buffer_bytes": 1}}}
+    )
+
+    namespace = config.to_namespace()
+
+    assert (namespace.weight_pull["model_name"], namespace.enable_ep_weight_filter) == ("Qwen/Qwen3-0.6B", True)
